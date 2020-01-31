@@ -158,6 +158,31 @@ def alltypes_sample(size=10000, seed=0, categorical=False):
 
 
 @pytest.mark.pandas
+@pytest.mark.parametrize('chunk_size', [1000])
+def test_get_record_batch_reader(tempdir, chunk_size):
+    df = alltypes_sample(size=10000, categorical=True)
+
+    filename = tempdir / 'pandas_roundtrip.parquet'
+    arrow_table_no_metadata = pa.Table.from_pandas(df).replace_schema_metadata()
+
+    _write_table(arrow_table_no_metadata, filename, version="2.0",
+                 coerce_timestamps='ms', chunk_size=chunk_size)
+
+    file_ = pq.ParquetFile(filename, batch_size=10)
+
+    batch = file_.reader.get_batches(
+        # Should I just implicitly pick up the number of row groups.
+        # if the bound is greater than file.num_row_groups it segfaults
+        range(0, file_.num_row_groups),
+        # This here is a major issue. If there are too many columns the row
+        # gets chunked.
+        [1,2,3]
+    )
+
+    batches = list(batch)
+
+
+@pytest.mark.pandas
 @pytest.mark.parametrize('chunk_size', [None, 1000])
 def test_pandas_parquet_2_0_roundtrip(tempdir, chunk_size):
     df = alltypes_sample(size=10000, categorical=True)
@@ -168,6 +193,11 @@ def test_pandas_parquet_2_0_roundtrip(tempdir, chunk_size):
 
     _write_table(arrow_table, filename, version="2.0",
                  coerce_timestamps='ms', chunk_size=chunk_size)
+
+
+    file_ = pq.ParquetFile(filename)
+    batch = file_.reader.get_record_batch_reader(range(1), range(len(file_.schema)))
+
     table_read = pq.read_pandas(filename)
     assert table_read.schema.pandas_metadata is not None
 

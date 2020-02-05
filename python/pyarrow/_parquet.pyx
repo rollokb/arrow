@@ -1090,11 +1090,11 @@ cdef class ParquetReader:
 
     def get_batches(self, row_groups, column_indices):
         cdef:
-            shared_ptr[CRecordBatchReader] recordbatchreader
             vector[int] c_row_groups
             vector[int] c_column_indices
             shared_ptr[CRecordBatch] record_batch
             shared_ptr[TableBatchReader] batch_reader
+            unique_ptr[CRecordBatchReader] recordbatchreader
 
         for row_group in row_groups:
             c_row_groups.push_back(row_group)
@@ -1102,16 +1102,17 @@ cdef class ParquetReader:
             for index in column_indices:
                 c_column_indices.push_back(index)
 
-        self.reader.get().GetRecordBatchReader(
-            c_row_groups, c_column_indices, &recordbatchreader
-        )
-        
-        while True:
-            check_status(
-                recordbatchreader.get().ReadNext(&record_batch)
+        check_status(
+            self.reader.get().GetRecordBatchReader(
+                c_row_groups, c_column_indices, &recordbatchreader
             )
+        )
 
-            print("{0:x}".format(<unsigned long>record_batch.get()))
+        while True:
+            with nogil:
+                check_status(
+                    recordbatchreader.get().ReadNext(&record_batch)
+                )
 
             if record_batch.get() == NULL:
                 break

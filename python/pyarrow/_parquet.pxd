@@ -403,21 +403,7 @@ cdef extern from "parquet/arrow/reader.h" namespace "parquet::arrow" nogil:
 
         CStatus GetRecordBatchReader(const vector[int]& row_group_indices,
                                      const vector[int]& column_indices,
-                                     shared_ptr[CRecordBatchReader]* out)
-
-# virtual ::arrow::Status GetRecordBatchReader(
-#     const std::vector<int>& row_group_indices, const std::vector<int>& column_indices,
-#     std::shared_ptr<::arrow::RecordBatchReader>* out) {
-#   std::unique_ptr<::arrow::RecordBatchReader> tmp;
-
-#   ARROW_RETURN_NOT_OK(GetRecordBatchReader(row_group_indices, column_indices, &tmp));
-#   out->reset(tmp.release());
-
-#   return ::arrow::Status::OK();
-# }
-
-
-
+                                     unique_ptr[CRecordBatchReader]* out)
 
         CStatus ReadTable(shared_ptr[CTable]* out)
         CStatus ReadTable(const vector[int]& column_indices,
@@ -429,6 +415,7 @@ cdef extern from "parquet/arrow/reader.h" namespace "parquet::arrow" nogil:
         const ParquetFileReader* parquet_reader()
 
         void set_use_threads(c_bool use_threads)
+        ArrowReaderProperties reader_properties_
 
     cdef cppclass FileReaderBuilder:
         FileReaderBuilder()

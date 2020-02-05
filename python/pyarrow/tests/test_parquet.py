@@ -157,30 +157,106 @@ def alltypes_sample(size=10000, seed=0, categorical=False):
     return pd.DataFrame(arrays)
 
 
+import psutil
+import os
+
+suffixes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
+current_thread = psutil.Process(os.getpid())
+
+
+def human_memory_size(nbytes):
+    i = 0
+    while nbytes >= 1024 and i < len(suffixes)-1:
+        nbytes /= 1024.
+        i += 1
+    f = ('%.2f' % nbytes).rstrip('0').rstrip('.')
+    return '%s %s' % (f, suffixes[i])
+
+
+def log_memory_usage(msg):
+    print(msg, human_memory_size(current_thread.memory_info().rss))
+
+
 @pytest.mark.pandas
 @pytest.mark.parametrize('chunk_size', [1000])
 def test_get_record_batch_reader(tempdir, chunk_size):
-    df = alltypes_sample(size=10000, categorical=True)
 
-    filename = tempdir / 'pandas_roundtrip.parquet'
-    arrow_table_no_metadata = pa.Table.from_pandas(df).replace_schema_metadata()
+    class LoggingIO(io.BytesIO):
+        def __init__(self, *args, **kwargs):
+            self.seeks = []
+            self.reads = []
+            super().__init__(*args, **kwargs)
 
-    _write_table(arrow_table_no_metadata, filename, version="2.0",
-                 coerce_timestamps='ms', chunk_size=chunk_size)
+        def read(self, *args):
+            self.reads.append(args)
+            return super().read(*args)
 
-    file_ = pq.ParquetFile(filename, batch_size=10)
+        def seek(self, *args):
+            self.seeks.append(args)
+            return super().seek(*args)
 
-    batch = file_.reader.get_batches(
-        # Should I just implicitly pick up the number of row groups.
-        # if the bound is greater than file.num_row_groups it segfaults
-        range(0, file_.num_row_groups),
-        # This here is a major issue. If there are too many columns the row
-        # gets chunked.
-        [1,2,3]
-    )
+    file_io = LoggingIO()
 
-    batches = list(batch)
+    with open('./pandas_categorical_type.parquet', 'rb') as f:
+        file_io.write(f.read())
 
+    file_io.seek(0)
+
+    file_ = pq.ParquetFile(file_io, batch_size=1000)
+
+    def get_all_batches(f):
+        for row_group in range(f.num_row_groups):
+            batches = f.reader.get_batches(
+                [row_group],
+                range(len(f.schema))
+            )
+
+            dictionary_fields = {}
+
+            for batch in batches:
+
+                for idx, array in enumerate(batch):
+                    if isinstance(array.type, pa.DictionaryType):
+                        if array.dictionary:
+                            dictionary_fields[idx] = array.dictionary
+
+                if dictionary_fields:
+                    # if there's a dictionary field we need to fix
+                    # the categorical types here.
+                    arrays = []
+                    for idx, array in enumerate(batch):
+                        if idx in dictionary_fields:
+                            arrays.append(
+                                pa.DictionaryArray.from_arrays(
+                                    array.indices, dictionary_fields[idx]
+                                )
+                            )
+                        else:
+                            arrays.append(array)
+
+                    batch = pa.RecordBatch.from_arrays(arrays, batch.schema)
+
+                yield batch
+
+    batches = list(get_all_batches(file_))
+    batch_no = 0
+
+    for i in range(file_.num_row_groups):
+        tm.assert_frame_equal(
+            batches[batch_no].to_pandas(),
+            file_.read_row_groups([i]).to_pandas().head(900)
+        )
+
+        batch_no += 1
+
+        tm.assert_frame_equal(
+            batches[batch_no].to_pandas().reset_index(drop=True),
+            file_.read_row_groups([i]).to_pandas().iloc[900:].reset_index(
+                drop=True
+            )
+        )
+
+        batch_no += 1
 
 @pytest.mark.pandas
 @pytest.mark.parametrize('chunk_size', [None, 1000])

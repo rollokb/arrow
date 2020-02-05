@@ -1780,6 +1780,7 @@ cdef class DictionaryArray(Array):
         -------
         dict_array : DictionaryArray
         """
+
         cdef:
             Array _indices, _dictionary
             shared_ptr[CDataType] c_type

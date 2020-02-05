@@ -160,29 +160,16 @@ def alltypes_sample(size=10000, seed=0, categorical=False):
 @pytest.mark.pandas
 @pytest.mark.parametrize('chunk_size', [1000])
 def test_get_record_batch_reader(tempdir, chunk_size):
+    df = alltypes_sample(size=10000, categorical=True)
 
-    class LoggingIO(io.BytesIO):
-        def __init__(self, *args, **kwargs):
-            self.seeks = []
-            self.reads = []
-            super().__init__(*args, **kwargs)
+    filename = tempdir / 'pandas_roundtrip.parquet'
+    arrow_table = pa.Table.from_pandas(df)
+    assert arrow_table.schema.pandas_metadata is not None
 
-        def read(self, *args):
-            self.reads.append(args)
-            return super().read(*args)
+    _write_table(arrow_table, filename, version="2.0",
+                 coerce_timestamps='ms', chunk_size=chunk_size)
 
-        def seek(self, *args):
-            self.seeks.append(args)
-            return super().seek(*args)
-
-    file_io = LoggingIO()
-
-    with open('./pandas_categorical_type.parquet', 'rb') as f:
-        file_io.write(f.read())
-
-    file_io.seek(0)
-
-    file_ = pq.ParquetFile(file_io, batch_size=1000)
+    file_ = pq.ParquetFile(filename_, batch_size=900)
 
     def get_all_batches(f):
         for row_group in range(f.num_row_groups):
@@ -250,11 +237,6 @@ def test_pandas_parquet_2_0_roundtrip(tempdir, chunk_size):
 
     _write_table(arrow_table, filename, version="2.0",
                  coerce_timestamps='ms', chunk_size=chunk_size)
-
-
-    file_ = pq.ParquetFile(filename)
-    batch = file_.reader.get_record_batch_reader(range(1), range(len(file_.schema)))
-
     table_read = pq.read_pandas(filename)
     assert table_read.schema.pandas_metadata is not None
 

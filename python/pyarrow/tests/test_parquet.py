@@ -157,26 +157,6 @@ def alltypes_sample(size=10000, seed=0, categorical=False):
     return pd.DataFrame(arrays)
 
 
-import psutil
-import os
-
-suffixes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
-current_thread = psutil.Process(os.getpid())
-
-
-def human_memory_size(nbytes):
-    i = 0
-    while nbytes >= 1024 and i < len(suffixes)-1:
-        nbytes /= 1024.
-        i += 1
-    f = ('%.2f' % nbytes).rstrip('0').rstrip('.')
-    return '%s %s' % (f, suffixes[i])
-
-
-def log_memory_usage(msg):
-    print(msg, human_memory_size(current_thread.memory_info().rss))
-
-
 @pytest.mark.pandas
 @pytest.mark.parametrize('chunk_size', [1000])
 def test_get_record_batch_reader(tempdir, chunk_size):
@@ -257,6 +237,7 @@ def test_get_record_batch_reader(tempdir, chunk_size):
         )
 
         batch_no += 1
+
 
 @pytest.mark.pandas
 @pytest.mark.parametrize('chunk_size', [None, 1000])

@@ -387,14 +387,6 @@ cdef extern from "parquet/arrow/reader.h" namespace "parquet::arrow" nogil:
         CStatus ReadRowGroup(int i, const vector[int]& column_indices,
                              shared_ptr[CTable]* out)
 
-
-# virtual ::arrow::Status ReadRowGroups(const std::vector<int>& row_groups,
-#                                       const std::vector<int>& column_indices,
-#                                       std::shared_ptr<::arrow::Table>* out) = 0;
-
-# virtual ::arrow::Status ReadRowGroups(const std::vector<int>& row_groups,
-#                                       std::shared_ptr<::arrow::Table>* out) = 0;
-
         CStatus ReadRowGroups(const vector[int]& row_groups,
                               shared_ptr[CTable]* out)
         CStatus ReadRowGroups(const vector[int]& row_groups,

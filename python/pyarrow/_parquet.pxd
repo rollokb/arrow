@@ -407,7 +407,6 @@ cdef extern from "parquet/arrow/reader.h" namespace "parquet::arrow" nogil:
         const ParquetFileReader* parquet_reader()
 
         void set_use_threads(c_bool use_threads)
-        ArrowReaderProperties reader_properties_
 
     cdef cppclass FileReaderBuilder:
         FileReaderBuilder()
